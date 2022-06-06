@@ -1,11 +1,7 @@
 package com.github.sparsick.ssh4j;
 
-import com.jcraft.jsch.ChannelExec;
-import com.jcraft.jsch.ChannelSftp;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.Session;
-import com.jcraft.jsch.SftpException;
+import com.jcraft.jsch.*;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -13,12 +9,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 
 public class JSchClient implements SshClient {
-
     private String password;
     private String user;
     private Path privateKey;
+    private boolean useCompression = false;
     private Session session;
     private Path knownHosts;
 
@@ -40,23 +37,34 @@ public class JSchClient implements SshClient {
     }
 
     @Override
-    public void connect(String host) throws IOException {
+    public void useCompression(boolean useCompression) {
+        this.useCompression = useCompression;
+    }
+
+    @Override
+    public void connect(String host, int port) throws IOException {
         if (session == null) {
             try {
                 JSch sshClient = new JSch();
                 if (privateKey != null) {
                     sshClient.addIdentity(privateKey.toString());
                 }
+                session = sshClient.getSession(user, host, port);
                 if (knownHosts != null) {
                     sshClient.setKnownHosts(knownHosts.toString());
                 } else {
-                    sshClient.setKnownHosts("~/.ssh/known_hosts");
+                    session.setConfig("StrictHostKeyChecking", "no");
+//                    sshClient.setKnownHosts("~/.ssh/known_hosts");
                 }
-                
-                session = sshClient.getSession(user, host);
+
+                if (useCompression) {
+                    session.setConfig("compression.s2c", "zlib@openssh.com,zlib,none");
+                    session.setConfig("compression.c2s", "zlib@openssh.com,zlib,none");
+                }
+
                 if (password != null) {
                     session.setPassword(password);
-                } else if (privateKey == null){
+                } else if (privateKey == null) {
                     throw new IOException("Either privateKey nor password is set. Please call one of the authentication method.");
                 }
                 session.connect();
@@ -64,7 +72,11 @@ public class JSchClient implements SshClient {
                 throw new IOException(ex);
             }
         }
+    }
 
+    @Override
+    public void connect(String host) throws IOException {
+        connect(host, 22);
     }
 
     @Override
@@ -88,7 +100,6 @@ public class JSchClient implements SshClient {
         } finally {
             if (sftpChannel != null) {
                 sftpChannel.disconnect();
-
             }
         }
     }
@@ -106,7 +117,6 @@ public class JSchClient implements SshClient {
         } finally {
             if (sftpChannel != null) {
                 sftpChannel.disconnect();
-
             }
         }
     }
@@ -123,7 +133,6 @@ public class JSchClient implements SshClient {
         } finally {
             if (sftpChannel != null) {
                 sftpChannel.disconnect();
-
             }
         }
     }
@@ -190,16 +199,20 @@ public class JSchClient implements SshClient {
     @Override
     public List<String> listChildrenNames(String remotePath) throws IOException {
         ChannelSftp sftpChannel = null;
+        List<String> children = new ArrayList<>();
         try {
             sftpChannel = (ChannelSftp) session.openChannel("sftp");
             sftpChannel.connect();
-            return sftpChannel.ls(remotePath);
+            Vector<ChannelSftp.LsEntry> ls = sftpChannel.ls(remotePath);
+            for (ChannelSftp.LsEntry l : ls) {
+                children.add(l.getFilename());
+            }
+            return children;
         } catch (SftpException | JSchException ex) {
             throw new IOException(ex);
         } finally {
             if (sftpChannel != null) {
                 sftpChannel.disconnect();
-
             }
         }
     }

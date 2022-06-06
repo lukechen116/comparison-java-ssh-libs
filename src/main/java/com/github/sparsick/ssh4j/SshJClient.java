@@ -1,22 +1,24 @@
 package com.github.sparsick.ssh4j;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.sftp.RemoteResourceFilter;
 import net.schmizz.sshj.sftp.RemoteResourceInfo;
 import net.schmizz.sshj.sftp.SFTPClient;
+import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import net.schmizz.sshj.xfer.FileSystemFile;
 
-public class SshJClient implements SshClient {
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
+public class SshJClient implements SshClient {
     private String user;
     private String password;
     private Path privateKey;
     private Path knownHosts;
+    private boolean useCompression = false;
     private SSHClient sshClient;
 
     @Override
@@ -37,12 +39,22 @@ public class SshJClient implements SshClient {
     }
 
     @Override
-    public void connect(String host) throws IOException {
+    public void useCompression(boolean useCompression) {
+        this.useCompression = useCompression;
+    }
+
+    @Override
+    public void connect(String host, int port) throws IOException {
         sshClient = new SSHClient();
         if (knownHosts == null) {
-            sshClient.loadKnownHosts();
+//            sshClient.loadKnownHosts();
+            sshClient.addHostKeyVerifier(new PromiscuousVerifier());
         } else {
             sshClient.loadKnownHosts(knownHosts.toFile());
+        }
+
+        if (useCompression) {
+            sshClient.useCompression();
         }
 
         sshClient.connect(host);
@@ -54,6 +66,11 @@ public class SshJClient implements SshClient {
         } else {
             throw new RuntimeException("Either privateKey nor password is set. Please call one of the auth method.");
         }
+    }
+
+    @Override
+    public void connect(String host) throws IOException {
+        connect(host, 22);
     }
 
     @Override

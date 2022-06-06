@@ -1,25 +1,25 @@
 package com.github.sparsick.ssh4j;
 
+import org.apache.commons.vfs2.*;
+import org.apache.commons.vfs2.impl.StandardFileSystemManager;
+import org.apache.commons.vfs2.provider.local.LocalFile;
+import org.apache.commons.vfs2.provider.sftp.SftpFileSystemConfigBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.commons.vfs2.AllFileSelector;
-import org.apache.commons.vfs2.FileObject;
-import org.apache.commons.vfs2.FileSystemException;
-import org.apache.commons.vfs2.FileSystemOptions;
-import org.apache.commons.vfs2.FileType;
-import org.apache.commons.vfs2.impl.StandardFileSystemManager;
-import org.apache.commons.vfs2.provider.local.LocalFile;
-import org.apache.commons.vfs2.provider.sftp.SftpFileSystemConfigBuilder;
 
 public class VfsSftpClient implements SshClient {
-
+    private static Logger logger = LoggerFactory.getLogger(VfsSftpClient.class);
     private String password;
     private String user;
     private Path privateKey;
     private Path knownHosts;
+    private boolean useCompression = false;
     private StandardFileSystemManager fileSystemManager;
     private FileObject remoteRootDirectory;
 
@@ -41,15 +41,26 @@ public class VfsSftpClient implements SshClient {
     }
 
     @Override
-    public void connect(String host) throws IOException {
+    public void useCompression(boolean useCompression) {
+        this.useCompression = useCompression;
+    }
+
+    @Override
+    public void connect(String host, int port) throws IOException {
         initFileSystemManager();
         FileSystemOptions connectionOptions = buildConnectionOptions();
-        String connectionUrl = buildConnectionUrl(host);
+        String connectionUrl = buildConnectionUrl(host, port);
         remoteRootDirectory = fileSystemManager.resolveFile(connectionUrl, connectionOptions);
+    }
+
+    @Override
+    public void connect(String host) throws IOException {
+        connect(host, 22);
     }
 
     private void initFileSystemManager() throws FileSystemException {
         if (fileSystemManager == null) {
+            System.setProperty("org.apache.commons.logging.Log", "org.apache.commons.logging.impl.NoOpLog");
             fileSystemManager = new StandardFileSystemManager();
             fileSystemManager.init();
         }
@@ -59,23 +70,29 @@ public class VfsSftpClient implements SshClient {
         SftpFileSystemConfigBuilder sftpConfigBuilder = SftpFileSystemConfigBuilder.getInstance();
         FileSystemOptions opts = new FileSystemOptions();
         sftpConfigBuilder.setUserDirIsRoot(opts, false);
-        sftpConfigBuilder.setStrictHostKeyChecking(opts, "yes");
         if (knownHosts != null) {
+            sftpConfigBuilder.setStrictHostKeyChecking(opts, "yes");
             sftpConfigBuilder.setKnownHosts(opts, knownHosts.toFile());
         } else {
-            sftpConfigBuilder.setKnownHosts(opts, new File("~/.ssh/known_hosts"));
+            sftpConfigBuilder.setStrictHostKeyChecking(opts, "no");
+//            sftpConfigBuilder.setKnownHosts(opts, new File("~/.ssh/known_hosts"));
         }
+
+        if (useCompression) {
+            sftpConfigBuilder.setCompression(opts, "zlib@openssh.com,zlib,none");
+        }
+
         if (privateKey != null) {
             sftpConfigBuilder.setIdentities(opts, new File[]{privateKey.toFile()});
         }
         return opts;
     }
 
-    private String buildConnectionUrl(String host) {
+    private String buildConnectionUrl(String host, int port) {
         if (privateKey != null) {
-            return String.format("sftp://%s@%s", user, host);
+            return String.format("sftp://%s@%s:%d", user, host, port);
         } else if (password != null) {
-            return String.format("sftp://%s:%s@%s", user, password, host);
+            return String.format("sftp://%s:%s@%s:%d", user, password, host, port);
         } else {
             throw new RuntimeException("Either privateKey nor password is set. Please call one of the auth methods.");
         }
