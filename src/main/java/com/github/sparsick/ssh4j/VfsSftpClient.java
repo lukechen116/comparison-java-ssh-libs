@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class VfsSftpClient implements SshClient {
-    private static Logger logger = LoggerFactory.getLogger(VfsSftpClient.class);
     private String password;
     private String user;
     private Path privateKey;
