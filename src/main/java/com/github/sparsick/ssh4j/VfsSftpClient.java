@@ -4,8 +4,6 @@ import org.apache.commons.vfs2.*;
 import org.apache.commons.vfs2.impl.StandardFileSystemManager;
 import org.apache.commons.vfs2.provider.local.LocalFile;
 import org.apache.commons.vfs2.provider.sftp.SftpFileSystemConfigBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -14,8 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class VfsSftpClient implements SshClient {
-    private String password;
     private String user;
+    private String password;
     private Path privateKey;
     private Path knownHosts;
     private boolean useCompression = false;
